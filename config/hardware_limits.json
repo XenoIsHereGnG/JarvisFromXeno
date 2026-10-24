@@ -1,0 +1,7 @@
+{
+  "cpu_model": "Intel Core i5-8350U",
+  "max_allowed_cpu_usage": 90,
+  "installed_ram_gb": 20.0,
+  "ram_throttle_threshold_percent": 88,
+  "vram_allocation_mb": 128
+}
