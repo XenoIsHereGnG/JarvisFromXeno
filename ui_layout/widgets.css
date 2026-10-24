@@ -1,0 +1,12 @@
+.row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+.agent-tag { font-size: 10px; padding: 4px 6px; border-radius: 3px; margin-bottom: 4px; border: 1px solid; }
+.agent-tag.on { border-color: #00ffaa; color: #00ffaa; background: rgba(0, 255, 170, 0.08); }
+.agent-tag.standby { border-color: #ffb300; color: #ffb300; background: rgba(255, 179, 0, 0.08); }
+.gauges { display: flex; justify-content: space-around; text-align: center; }
+.gauge span { display: block; font-size: 18px; font-weight: bold; color: #00e5ff; }
+.gauge small { font-size: 9px; color: #53819d; }
+.terminal-card { height: 160px; display: flex; flex-direction: column; }
+.terminal-log { flex: 1; font-size: 12px; color: #a5d8f3; font-family: monospace; overflow-y: auto; }
+.terminal-bar { display: flex; gap: 6px; margin-top: 6px; }
+.terminal-bar input { flex: 1; background: rgba(0, 0, 0, 0.5); border: 1px solid #00e5ff; color: #fff; padding: 6px; }
+.terminal-bar button { background: rgba(0, 229, 255, 0.15); border: 1px solid #00e5ff; color: #00e5ff; padding: 6px 12px; cursor: pointer; }
