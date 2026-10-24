@@ -1,0 +1,6 @@
+{
+  "default_voice": "it-IT-GiuseppeNeural",
+  "fallback_voice": "it-IT-DiegoNeural",
+  "pitch_offset": "-3Hz",
+  "rate_offset": "+4%"
+}
