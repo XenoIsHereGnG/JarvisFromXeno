@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>JARVIS COMMAND CENTER</title>
+  <link rel="stylesheet" href="/ui_layout/hud_matrix.css">
+  <link rel="stylesheet" href="/ui_layout/holo_theme.css">
+  <link rel="stylesheet" href="/ui_layout/widgets.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div class="hud-viewport">
+    <header class="hud-top">
+      <div class="brand"><div class="reactor-dot"></div><span>JARVIS</span> <small>COMMAND CENTER</small></div>
+      <div class="badge status">SYSTEM STATUS &bull; <span>OPTIMAL</span></div>
+      <div class="badge time" id="clock">11:18:21 am</div>
+      <div class="badge user">Operator: <strong>Commander</strong></div>
+    </header>
+
+    <main class="hud-body">
+      <aside class="col-left">
+        <div class="card">
+          <div class="title">AI CORE OVERVIEW</div>
+          <div class="row"><span>AI Core</span><span class="cyan">Active</span></div>
+          <div class="row"><span>Memory</span><span>3,380 Stored</span></div>
+          <div class="row"><span>Voice</span><span class="cyan">Online</span></div>
+          <div class="row"><span>System</span><span class="green">Optimal</span></div>
+        </div>
+        <div class="card">
+          <div class="title">ACTIVE AGENTS</div>
+          <div class="agent-tag on">Coding Agent</div>
+          <div class="agent-tag on">Research Agent</div>
+          <div class="agent-tag standby">Memory Agent</div>
+          <div class="agent-tag on">System Agent</div>
+        </div>
+      </aside>
+
+      <section class="col-center">
+        <div class="holo-stage" id="holo-canvas-wrapper">
+          <div class="holo-text-overlay">
+            <h1>JARVIS</h1>
+            <p>AI CORE v3.0.0</p>
+          </div>
+        </div>
+        <div class="card terminal-card">
+          <div class="terminal-log" id="transcript-feed">Pronto all'ascolto, Comandante.</div>
+          <div class="terminal-bar">
+            <input type="text" id="terminal-input" placeholder="Talk to Jarvis - Digita o premi Parla..." />
+            <button id="btn-submit">Invia</button>
+            <button id="btn-voice">🎤 Parla</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="col-right">
+        <div class="card">
+          <div class="title">SYSTEM MONITOR</div>
+          <div class="gauges">
+            <div class="gauge"><span id="cpu-txt">15%</span><small>CPU</small></div>
+            <div class="gauge"><span id="ram-txt">54%</span><small>RAM (20GB)</small></div>
+            <div class="gauge"><span id="disk-txt">40%</span><small>DISK</small></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="title">MEMORY INSIGHTS</div>
+          <canvas id="mem-canvas" height="90"></canvas>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/ui_controllers/hologram_core.js"></script>
+  <script src="/ui_controllers/memory_graph.js"></script>
+  <script src="/ui_controllers/gauges_manager.js"></script>
+  <script src="/ui_controllers/command_hub.js"></script>
+</body>
+</html>
