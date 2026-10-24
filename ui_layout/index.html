@@ -2,76 +2,653 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>JARVIS COMMAND CENTER</title>
-  <link rel="stylesheet" href="/ui_layout/hud_matrix.css">
-  <link rel="stylesheet" href="/ui_layout/holo_theme.css">
-  <link rel="stylesheet" href="/ui_layout/widgets.css">
+  <title>J.A.R.V.I.S. — COMMAND CENTER v3.0</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg-void: #01060e;
+      --panel-glass: rgba(5, 18, 34, 0.76);
+      --cyan: #00e5ff;
+      --cyan-dim: rgba(0, 229, 255, 0.25);
+      --cyan-glow: 0 0 18px rgba(0, 229, 255, 0.45);
+      --green: #00ffaa;
+      --orange: #ffaa00;
+      --red: #ff2a55;
+      --text: #d8f3ff;
+      --muted: #5887a2;
+    }
+    body.mode-red_alert { --cyan: #ff2a55; --cyan-dim: rgba(255, 42, 85, 0.35); --cyan-glow: 0 0 25px rgba(255, 42, 85, 0.6); }
+    body.mode-ghost { --cyan: #a855f7; --cyan-dim: rgba(168, 85, 247, 0.35); --cyan-glow: 0 0 22px rgba(168, 85, 247, 0.5); }
+    body.mode-overdrive { --cyan: #00ffaa; --cyan-dim: rgba(0, 255, 170, 0.35); --cyan-glow: 0 0 25px rgba(0, 255, 170, 0.6); }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', 'Consolas', monospace; user-select: none; }
+    body { background: var(--bg-void); color: var(--text); height: 100vh; overflow: hidden; transition: all 0.5s ease; }
+
+    /* Canvas 3D globale sempre attivo in sottofondo */
+    #global-bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .scanline-overlay {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 229, 255, 0.03) 50%);
+      background-size: 100% 4px;
+    }
+
+    /* OVERLAY DI AUTENTICAZIONE (Password & API Key) */
+    .boot-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at center, rgba(1, 12, 28, 0.55) 0%, rgba(1, 6, 14, 0.92) 80%);
+      backdrop-filter: blur(6px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .boot-overlay.hidden { opacity: 0; pointer-events: none; transform: scale(1.12); }
+
+    .auth-holo-box {
+      width: 480px; padding: 34px;
+      background: rgba(4, 16, 32, 0.85);
+      border: 1px solid var(--cyan);
+      border-radius: 8px;
+      box-shadow: var(--cyan-glow), inset 0 0 30px rgba(0, 229, 255, 0.12);
+      text-align: center; position: relative; overflow: hidden;
+      animation: floatPulse 4s ease-in-out infinite;
+    }
+    @keyframes floatPulse {
+      0%, 100% { transform: translateY(0px); box-shadow: 0 0 20px rgba(0, 229, 255, 0.4); }
+      50% { transform: translateY(-6px); box-shadow: 0 0 38px rgba(0, 229, 255, 0.75); }
+    }
+    .holo-ring-spinner {
+      width: 96px; height: 96px; margin: 0 auto 18px;
+      border: 3px dashed var(--cyan); border-top: 3px solid var(--green);
+      border-radius: 50%; animation: spin 3.5s linear infinite;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 18px rgba(0, 229, 255, 0.4);
+    }
+    .holo-ring-inner {
+      width: 66px; height: 66px; border: 2px solid var(--cyan);
+      border-bottom: 2px solid transparent; border-radius: 50%;
+      animation: spinReverse 2s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    @keyframes spinReverse { 100% { transform: rotate(-360deg); } }
+
+    .auth-title { font-size: 22px; letter-spacing: 5px; color: var(--cyan); margin-bottom: 6px; text-shadow: 0 0 10px var(--cyan); }
+    .auth-sub { font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-bottom: 22px; }
+    .auth-input {
+      width: 100%; padding: 12px 16px; background: rgba(0, 10, 22, 0.9);
+      border: 1px solid var(--cyan); color: #fff; font-size: 14px;
+      letter-spacing: 3px; text-align: center; border-radius: 4px; outline: none;
+      box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.2); margin-bottom: 16px;
+    }
+    .auth-btn {
+      width: 100%; padding: 12px; background: rgba(0, 229, 255, 0.16);
+      border: 1px solid var(--cyan); color: var(--cyan); font-weight: bold;
+      letter-spacing: 4px; cursor: pointer; border-radius: 4px; transition: 0.25s;
+    }
+    .auth-btn:hover { background: var(--cyan); color: #000; box-shadow: 0 0 25px var(--cyan); }
+    .auth-error { color: var(--red); font-size: 11px; margin-top: 10px; min-height: 16px; letter-spacing: 1.5px; }
+
+    /* MAIN HUD COMMAND CENTER (Fedele all'immagine e animato) */
+    .hud-shell {
+      position: relative; z-index: 10;
+      display: flex; flex-direction: column; height: 100vh; padding: 8px 12px; gap: 8px;
+      opacity: 0; transform: scale(0.96); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .hud-shell.unlocked { opacity: 1; transform: scale(1); }
+
+    /* Top Bar */
+    .hud-topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--panel-glass); border: 1px solid var(--cyan-dim);
+      padding: 6px 16px; border-radius: 4px; box-shadow: var(--cyan-glow);
+    }
+    .brand-box { display: flex; align-items: center; gap: 10px; }
+    .arc-icon {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 2px solid var(--cyan); box-shadow: 0 0 12px var(--cyan), inset 0 0 8px var(--cyan);
+      animation: spin 8s linear infinite;
+    }
+    .brand-box h1 { font-size: 18px; letter-spacing: 4px; color: var(--cyan); }
+    .brand-box small { font-size: 9px; letter-spacing: 2px; color: var(--muted); display: block; }
+    .top-pill { background: rgba(0, 229, 255, 0.08); border: 1px solid var(--cyan-dim); padding: 4px 12px; border-radius: 12px; font-size: 11px; }
+    .hud-clock-big { font-size: 16px; color: var(--cyan); letter-spacing: 2px; font-weight: bold; text-shadow: 0 0 8px var(--cyan); }
+
+    /* Main Grid */
+    .hud-grid { display: grid; grid-template-columns: 205px 1fr; gap: 8px; flex: 1; min-height: 0; }
+    .sidebar-col { display: flex; flex-direction: column; gap: 8px; }
+    .nav-card {
+      background: var(--panel-glass); border: 1px solid var(--cyan-dim);
+      border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 3px; flex: 1;
+    }
+    .nav-row {
+      padding: 7px 10px; font-size: 11px; color: var(--muted); border-radius: 4px;
+      cursor: pointer; display: flex; justify-content: space-between; transition: 0.2s;
+    }
+    .nav-row:hover, .nav-row.active { background: rgba(0, 229, 255, 0.16); color: var(--cyan); border-left: 3px solid var(--cyan); }
+
+    .card {
+      background: var(--panel-glass); border: 1px solid var(--cyan-dim);
+      border-radius: 5px; padding: 10px; position: relative; overflow: hidden;
+      box-shadow: inset 0 0 14px rgba(0, 229, 255, 0.05);
+    }
+    .card::before {
+      content: ""; position: absolute; top: 0; left: 0; width: 12px; height: 12px;
+      border-top: 2px solid var(--cyan); border-left: 2px solid var(--cyan);
+    }
+    .card-hdr { font-size: 10px; letter-spacing: 1.8px; color: var(--cyan); margin-bottom: 8px; font-weight: bold; display: flex; justify-content: space-between; }
+
+    /* Center Stage 3 Rows */
+    .stage-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+    .row-top { display: grid; grid-template-columns: 215px 1fr 295px; gap: 8px; height: 235px; }
+    .row-mid { display: grid; grid-template-columns: 1fr 265px 225px; gap: 8px; height: 145px; }
+    .row-bot { display: grid; grid-template-columns: 265px 1fr 270px; gap: 8px; flex: 1; min-height: 0; }
+
+    .kv-line { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px dashed rgba(0, 229, 255, 0.12); }
+
+    /* Center 3D Globe Box */
+    .globe-box { position: relative; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(0, 229, 255, 0.14) 0%, transparent 72%); }
+    #holo-globe-mount { width: 100%; height: 100%; position: absolute; inset: 0; }
+    .globe-title-overlay { position: relative; z-index: 2; text-align: center; pointer-events: none; }
+    .globe-title-overlay h2 { font-size: 32px; letter-spacing: 10px; color: var(--cyan); text-shadow: 0 0 18px var(--cyan); }
+    .globe-title-overlay p { font-size: 10px; letter-spacing: 4px; color: var(--text); }
+
+    /* Active Agents Grid */
+    .agents-matrix { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .agent-box {
+      border: 1px solid var(--cyan-dim); background: rgba(0, 12, 24, 0.65);
+      padding: 7px; border-radius: 4px; font-size: 10px; transition: 0.3s;
+    }
+    .agent-box.firing { border-color: var(--green); box-shadow: 0 0 15px rgba(0, 255, 170, 0.45); transform: scale(1.03); }
+    .agent-box .st { font-size: 9px; color: var(--green); }
+
+    /* Gauges */
+    .gauges-row { display: flex; justify-content: space-around; align-items: center; height: 82%; }
+    .gauge-item { width: 70px; text-align: center; position: relative; }
+    .circular-svg { width: 64px; height: 64px; }
+    .bg-ring { fill: none; stroke: rgba(0, 229, 255, 0.14); stroke-width: 3.6; }
+    .val-ring { fill: none; stroke: var(--cyan); stroke-width: 3.6; stroke-linecap: round; transition: stroke-dasharray 0.5s ease; }
+    .gauge-num { position: absolute; top: 22px; left: 0; right: 0; font-size: 12px; font-weight: bold; }
+    .gauge-lbl { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+    /* Quick Buttons */
+    .q-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .q-btn {
+      background: rgba(0, 229, 255, 0.08); border: 1px solid var(--cyan-dim);
+      color: var(--text); padding: 6px; font-size: 10px; border-radius: 3px; cursor: pointer; transition: 0.2s;
+    }
+    .q-btn:hover { background: var(--cyan); color: #000; box-shadow: 0 0 12px var(--cyan); }
+
+    /* Bottom Talk to Jarvis Bar */
+    .hud-footer {
+      background: var(--panel-glass); border: 1px solid var(--cyan);
+      border-radius: 6px; padding: 7px 14px; display: flex; align-items: center; gap: 14px;
+      box-shadow: var(--cyan-glow);
+    }
+    #audio-eq-canvas { width: 120px; height: 28px; }
+    .cmd-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: #fff; font-size: 13px; letter-spacing: 1.5px;
+    }
+    .jarvis-subtitles { font-size: 11px; color: var(--cyan); max-width: 42%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hud-action-btn {
+      background: rgba(0, 229, 255, 0.18); border: 1px solid var(--cyan);
+      color: var(--cyan); padding: 6px 14px; font-size: 10px; letter-spacing: 2px;
+      border-radius: 4px; cursor: pointer; font-weight: bold;
+    }
+    .hud-action-btn:hover { background: var(--cyan); color: #000; }
+  </style>
 </head>
 <body>
-  <div class="hud-viewport">
-    <header class="hud-top">
-      <div class="brand"><div class="reactor-dot"></div><span>JARVIS</span> <small>COMMAND CENTER</small></div>
-      <div class="badge status">SYSTEM STATUS &bull; <span>OPTIMAL</span></div>
-      <div class="badge time" id="clock">11:18:21 am</div>
-      <div class="badge user">Operator: <strong>Commander</strong></div>
+  <!-- SFONDO 3D CONTINUO (Attivo sia nel Login che nell'HUD) -->
+  <canvas id="global-bg-canvas"></canvas>
+  <div class="scanline-overlay"></div>
+
+  <!-- STADIO 1: SCHERMATA PASSWORD ("PASSWORDCHANGED12$") -->
+  <div class="boot-overlay" id="stage-password">
+    <div class="auth-holo-box">
+      <div class="holo-ring-spinner"><div class="holo-ring-inner"></div></div>
+      <div class="auth-title">J.A.R.V.I.S. SECURITY</div>
+      <div class="auth-sub">PROTOCOLLO DI CRITTOGRAFIA LIVELLO 10 — RICHIESTA PASSWORD</div>
+      <input type="password" id="pwd-input" class="auth-input" placeholder="INSERISCI MASTER PASSWORD" autofocus />
+      <button class="auth-btn" id="pwd-submit-btn">SBLOCCA SISTEMA</button>
+      <div class="auth-error" id="pwd-error"></div>
+    </div>
+  </div>
+
+  <!-- STADIO 2: SCHERMATA GEMINI API KEY -->
+  <div class="boot-overlay hidden" id="stage-apikey">
+    <div class="auth-holo-box">
+      <div class="holo-ring-spinner"><div class="holo-ring-inner"></div></div>
+      <div class="auth-title">NEURAL CORE LINK</div>
+      <div class="auth-sub">IDENTITÀ CONFERMATA — COLLEGA CHIAVE API GOOGLE GEMINI</div>
+      <input type="password" id="apikey-input" class="auth-input" placeholder="AIzaSy..." />
+      <button class="auth-btn" id="apikey-submit-btn">INIZIALIZZA MATRICE AI</button>
+      <div class="auth-error" id="apikey-error"></div>
+    </div>
+  </div>
+
+  <!-- STADIO 3: COMMAND CENTER HUD COMPLETO -->
+  <div class="hud-shell" id="hud-main">
+    <header class="hud-topbar">
+      <div class="brand-box">
+        <div class="arc-icon"></div>
+        <div><h1>JARVIS</h1><small>COMMAND CENTER</small></div>
+      </div>
+      <div class="top-pill">SYSTEM STATUS &bull; <strong style="color:var(--green)" id="protocol-label">OPTIMAL</strong></div>
+      <div class="hud-clock-big" id="live-clock">11:18:21 AM</div>
+      <div class="top-pill">Hardware: <strong>i5-8350U | 20GB RAM</strong> &bull; Operator: <strong>Commander</strong></div>
     </header>
 
-    <main class="hud-body">
-      <aside class="col-left">
-        <div class="card">
-          <div class="title">AI CORE OVERVIEW</div>
-          <div class="row"><span>AI Core</span><span class="cyan">Active</span></div>
-          <div class="row"><span>Memory</span><span>3,380 Stored</span></div>
-          <div class="row"><span>Voice</span><span class="cyan">Online</span></div>
-          <div class="row"><span>System</span><span class="green">Optimal</span></div>
+    <div class="hud-grid">
+      <!-- Sidebar Sinistra -->
+      <aside class="sidebar-col">
+        <div class="nav-card">
+          <div class="nav-row active" onclick="sendCmd('Rapporto stato di tutti i sistemi')"><span>⊞ Command Center</span></div>
+          <div class="nav-row" onclick="sendCmd('Guarda il mio schermo e dimmi cosa vedi')"><span>👁️ AI Screen Vision</span></div>
+          <div class="nav-row" onclick="sendCmd('Attiva protocollo Overdrive')"><span>⚡ Protocol Overdrive</span></div>
+          <div class="nav-row" onclick="sendCmd('Attiva protocollo Fantasma')"><span>👻 Ghost Stealth</span></div>
+          <div class="nav-row" onclick="sendCmd('Attiva protocollo Red Alert')"><span>🚨 Red Alert Mode</span></div>
+          <div class="nav-row" onclick="sendCmd('Analizza i processi che consumano più RAM')"><span>🧠 Neural Diagnostics</span></div>
+          <div class="nav-row" onclick="sendCmd('Apri Esplora Risorse')"><span>📁 File System</span></div>
+          <div class="nav-row" onclick="sendCmd('Apri il Terminale Windows')"><span>⌨️ OS PowerShell</span></div>
         </div>
-        <div class="card">
-          <div class="title">ACTIVE AGENTS</div>
-          <div class="agent-tag on">Coding Agent</div>
-          <div class="agent-tag on">Research Agent</div>
-          <div class="agent-tag standby">Memory Agent</div>
-          <div class="agent-tag on">System Agent</div>
+
+        <div class="card" style="text-align:center">
+          <div class="card-hdr"><span>VOICE STATUS</span><span style="color:var(--green)">ONLINE</span></div>
+          <div style="font-size:10px; color:var(--muted); margin-bottom:8px" id="mic-status-lbl">Neural Voice: Giuseppe Adult</div>
+          <button class="hud-action-btn" id="mic-btn" style="width:100%">🎤 PARLA CON JARVIS</button>
         </div>
       </aside>
 
-      <section class="col-center">
-        <div class="holo-stage" id="holo-canvas-wrapper">
-          <div class="holo-text-overlay">
-            <h1>JARVIS</h1>
-            <p>AI CORE v3.0.0</p>
+      <!-- Centro Operativo -->
+      <section class="stage-col">
+        <!-- Riga 1: Overview, 3D Core, Live Intelligence Feed -->
+        <div class="row-top">
+          <div class="card">
+            <div class="card-hdr"><span>AI CORE OVERVIEW</span></div>
+            <div class="kv-line"><span>AI Core</span><span style="color:var(--green)">Active</span></div>
+            <div class="kv-line"><span>Neural Epochs</span><span id="nn-epochs">0</span></div>
+            <div class="kv-line"><span>Synapse Loss</span><span id="nn-loss">0.0012</span></div>
+            <div class="kv-line"><span>Predicted Load</span><span id="nn-pred" style="color:var(--cyan)">18%</span></div>
+            <div class="kv-line"><span>OS Processes</span><span id="os-procs">--</span></div>
+            <div class="kv-line"><span>Voice Engine</span><span style="color:var(--green)">Edge Neural</span></div>
+          </div>
+
+          <div class="card globe-box">
+            <div id="holo-globe-mount"></div>
+            <div class="globe-title-overlay">
+              <h2>JARVIS</h2>
+              <p>AI CORE v3.0.0 &bull; NEURAL LINK</p>
+            </div>
+          </div>
+
+          <div class="card" style="display:flex; flex-direction:column;">
+            <div class="card-hdr"><span>LIVE INTELLIGENCE FEED</span><span style="color:var(--green)">● LIVE</span></div>
+            <div id="intel-feed" style="flex:1; overflow-y:auto; font-size:10px; display:flex; flex-direction:column; gap:5px;">
+              <div style="border-left:2px solid var(--cyan); padding-left:6px;">[CORE] Rete Neurale MLP inizializzata su CPU i5-8350U.</div>
+              <div style="border-left:2px solid var(--green); padding-left:6px;">[SECURITY] Autenticazione Master completata.</div>
+            </div>
           </div>
         </div>
-        <div class="card terminal-card">
-          <div class="terminal-log" id="transcript-feed">Pronto all'ascolto, Comandante.</div>
-          <div class="terminal-bar">
-            <input type="text" id="terminal-input" placeholder="Talk to Jarvis - Digita o premi Parla..." />
-            <button id="btn-submit">Invia</button>
-            <button id="btn-voice">🎤 Parla</button>
+
+        <!-- Riga 2: Active Agents, Neural Network Live Layers, Quick Commands -->
+        <div class="row-mid">
+          <div class="card">
+            <div class="card-hdr"><span>ACTIVE AGENTS (NEURAL ROUTER)</span></div>
+            <div class="agents-matrix">
+              <div class="agent-box" id="ag-System Agent"><strong>⚙ System Agent</strong><div class="st">Ready</div></div>
+              <div class="agent-box" id="ag-Coding Agent"><strong>&lt;/&gt; Coding Agent</strong><div class="st">Active</div></div>
+              <div class="agent-box" id="ag-Research Agent"><strong>👁️ Vision/Research</strong><div class="st">Active</div></div>
+              <div class="agent-box" id="ag-Browser Agent"><strong>🌐 Browser Agent</strong><div class="st">Standby</div></div>
+              <div class="agent-box" id="ag-Memory Agent"><strong>💾 Memory Agent</strong><div class="st">Standby</div></div>
+              <div class="agent-box firing"><strong>🧠 MLP Neural Net</strong><div class="st">Learning Live</div></div>
+            </div>
+          </div>
+
+          <!-- RETE NEURALE IN TEMPO REALE -->
+          <div class="card">
+            <div class="card-hdr"><span>LIVE NEURAL NETWORK (4-8-6-2)</span><span id="nn-anom">RISK: 2%</span></div>
+            <canvas id="neural-net-canvas" style="width:100%; height:95px;"></canvas>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr"><span>GOD MODE DIRECTIVES</span></div>
+            <div class="q-grid">
+              <button class="q-btn" onclick="sendCmd('Guarda il mio schermo e descrivilo')">👁️ Visione PC</button>
+              <button class="q-btn" onclick="sendCmd('Mostra il desktop riducendo tutte le finestre')">🖥️ Mostra Desktop</button>
+              <button class="q-btn" onclick="sendCmd('Apri Blocco Note e scrivi: Sistema Jarvis Operativo')">✍️ Ghost Typing</button>
+              <button class="q-btn" onclick="sendCmd('Fai uno screenshot dello schermo')">📸 Screenshot</button>
+              <button class="q-btn" onclick="sendCmd('Apri Google Chrome')">🌐 Apri Chrome</button>
+              <button class="q-btn" onclick="sendCmd('Attiva protocollo Overdrive')">⚡ Overdrive</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Riga 3: System Monitor, Memory Constellation, LLM Status -->
+        <div class="row-bot">
+          <div class="card">
+            <div class="card-hdr"><span>SYSTEM MONITOR</span></div>
+            <div class="gauges-row">
+              <div class="gauge-item">
+                <svg viewBox="0 0 36 36" class="circular-svg">
+                  <path class="bg-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                  <path id="g-cpu-ring" class="val-ring" stroke-dasharray="15, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                </svg>
+                <div class="gauge-num" id="g-cpu-txt">15%</div>
+                <div class="gauge-lbl">CPU</div>
+              </div>
+              <div class="gauge-item">
+                <svg viewBox="0 0 36 36" class="circular-svg">
+                  <path class="bg-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                  <path id="g-ram-ring" class="val-ring" stroke-dasharray="54, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                </svg>
+                <div class="gauge-num" id="g-ram-txt">54%</div>
+                <div class="gauge-lbl">RAM (20GB)</div>
+              </div>
+              <div class="gauge-item">
+                <svg viewBox="0 0 36 36" class="circular-svg">
+                  <path class="bg-ring" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                  <path id="g-disk-ring" class="val-ring" stroke-dasharray="40, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                </svg>
+                <div class="gauge-num" id="g-disk-txt">40%</div>
+                <div class="gauge-lbl">DISK (261GB)</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr"><span>MEMORY INSIGHTS & SYNAPTIC CONSTELLATION</span><span>3,380 STORED</span></div>
+            <canvas id="constellation-canvas" style="width:100%; height:82%;"></canvas>
+          </div>
+
+          <div class="card">
+            <div class="card-hdr"><span>LLM & HARDWARE BRIDGE</span><span style="color:var(--green)">CONNECTED</span></div>
+            <div class="kv-line"><span>Primary Brain</span><span style="color:var(--cyan)">Gemini 2.5 Flash</span></div>
+            <div class="kv-line"><span>Vision Engine</span><span style="color:var(--green)">Multimodal Screen</span></div>
+            <div class="kv-line"><span>OS Automation</span><span style="color:var(--green)">PyAutoGUI + PS1</span></div>
+            <div class="kv-line"><span>Local MLP Net</span><span style="color:var(--cyan)">NumPy Backprop</span></div>
           </div>
         </div>
       </section>
+    </div>
 
-      <aside class="col-right">
-        <div class="card">
-          <div class="title">SYSTEM MONITOR</div>
-          <div class="gauges">
-            <div class="gauge"><span id="cpu-txt">15%</span><small>CPU</small></div>
-            <div class="gauge"><span id="ram-txt">54%</span><small>RAM (20GB)</small></div>
-            <div class="gauge"><span id="disk-txt">40%</span><small>DISK</small></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="title">MEMORY INSIGHTS</div>
-          <canvas id="mem-canvas" height="90"></canvas>
-        </div>
-      </aside>
-    </main>
+    <!-- Barra Inferiore Talk To Jarvis con Equalizzatore Olografico -->
+    <footer class="hud-footer">
+      <canvas id="audio-eq-canvas"></canvas>
+      <input type="text" id="cmd-input" class="cmd-input" placeholder="TALK TO JARVIS — Ordina qualsiasi azione sul tuo PC..." />
+      <div class="jarvis-subtitles" id="jarvis-sub">JARVIS: In attesa di ordini, Comandante.</div>
+      <button class="hud-action-btn" id="send-btn">ESEGUI</button>
+    </footer>
   </div>
 
-  <script src="/ui_controllers/hologram_core.js"></script>
-  <script src="/ui_controllers/memory_graph.js"></script>
-  <script src="/ui_controllers/gauges_manager.js"></script>
-  <script src="/ui_controllers/command_hub.js"></script>
+  <script src="/neural_network/visualizer_bridge.js"></script>
+  <script>
+    // 1. SFONDO 3D CONTINUO (Tunnel Quantistico + Sfera Olografica Centrale)
+    let globePulse = 0;
+    (function initUltra3D() {
+      const bgCanvas = document.getElementById("global-bg-canvas");
+      const renderer = new THREE.WebGLRenderer({ canvas: bgCanvas, alpha: true, antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 12;
+
+      const starGeo = new THREE.BufferGeometry();
+      const count = 1400;
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count * 3; i++) positions[i] = (Math.random() - 0.5) * 45;
+      starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const starMat = new THREE.PointsMaterial({ color: 0x00e5ff, size: 0.07, transparent: true, opacity: 0.65 });
+      const stars = new THREE.Points(starGeo, starMat);
+      scene.add(stars);
+
+      // Globo 3D dentro il pannello centrale
+      const mount = document.getElementById("holo-globe-mount");
+      const gScene = new THREE.Scene();
+      const gCam = new THREE.PerspectiveCamera(45, 1.6, 0.1, 100);
+      gCam.position.z = 5.2;
+      const gRen = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      gRen.setSize(420, 230);
+      mount.appendChild(gRen.domElement);
+
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(1.75, 28, 28),
+        new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.42 })
+      );
+      gScene.add(sphere);
+
+      const ring1 = new THREE.Mesh(
+        new THREE.RingGeometry(2.2, 2.26, 64),
+        new THREE.MeshBasicMaterial({ color: 0x00ffaa, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+      );
+      ring1.rotation.x = 1.2;
+      gScene.add(ring1);
+
+      const ring2 = new THREE.Mesh(
+        new THREE.RingGeometry(2.45, 2.5, 64),
+        new THREE.MeshBasicMaterial({ color: 0x0088ff, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
+      );
+      ring2.rotation.y = 1.1;
+      gScene.add(ring2);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        stars.rotation.z += 0.0008;
+        stars.rotation.y += 0.0004;
+        renderer.render(scene, camera);
+
+        const scale = 1 + globePulse * 0.28;
+        sphere.scale.set(scale, scale, scale);
+        sphere.rotation.y += 0.004 + globePulse * 0.03;
+        ring1.rotation.z += 0.008;
+        ring2.rotation.z -= 0.006;
+        globePulse *= 0.92;
+        gRen.render(gScene, gCam);
+      }
+      animate();
+
+      window.addEventListener("resize", () => {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+      });
+    })();
+
+    // 2. AUDIO ENGINE CON EQUALIZZATORE REATTIVO ALLA VOCE DI JARVIS
+    let audioCtx, analyser, dataArray;
+    function playJarvisSpeech() {
+      const audio = new Audio(`/ui_layout/speech.mp3?t=${Date.now()}`);
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 64;
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+      }
+      const src = audioCtx.createMediaElementSource(audio);
+      src.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      audio.play().catch(() => {});
+    }
+
+    // Equalizzatore grafico barra inferiore
+    (function renderEqualizer() {
+      const c = document.getElementById("audio-eq-canvas");
+      const ctx = c.getContext("2d");
+      function loop() {
+        requestAnimationFrame(loop);
+        ctx.clearRect(0, 0, c.width, c.height);
+        let avg = 0;
+        if (analyser && dataArray) {
+          analyser.getByteFrequencyData(dataArray);
+          for (let i = 0; i < 16; i++) {
+            const v = dataArray[i] / 255;
+            avg += v;
+            const h = Math.max(3, v * c.height);
+            ctx.fillStyle = "#00e5ff";
+            ctx.fillRect(i * 18, (c.height - h) / 2, 12, h);
+          }
+          globePulse = avg / 16;
+        }
+      }
+      loop();
+    })();
+
+    // 3. STADIO 1: VERIFICA PASSWORD ("PASSWORDCHANGED12$")
+    async function checkPassword() {
+      const pwd = document.getElementById("pwd-input").value;
+      const errEl = document.getElementById("pwd-error");
+      const res = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwd })
+      });
+      playJarvisSpeech();
+      if (res.ok) {
+        document.getElementById("stage-password").classList.add("hidden");
+        document.getElementById("stage-apikey").classList.remove("hidden");
+        document.getElementById("apikey-input").focus();
+      } else {
+        errEl.innerText = "⚠ ACCESSO NEGATO: PASSWORD ERRATA";
+        document.body.className = "mode-red_alert";
+        setTimeout(() => (document.body.className = ""), 1800);
+      }
+    }
+    document.getElementById("pwd-submit-btn").onclick = checkPassword;
+    document.getElementById("pwd-input").addEventListener("keypress", e => e.key === "Enter" && checkPassword());
+
+    // 4. STADIO 2: CONFIGURAZIONE GEMINI API KEY
+    async function saveApiKey() {
+      const key = document.getElementById("apikey-input").value.trim();
+      const errEl = document.getElementById("apikey-error");
+      const res = await fetch("/api/auth/set-api-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: key })
+      });
+      if (res.ok) {
+        playJarvisSpeech();
+        document.getElementById("stage-apikey").classList.add("hidden");
+        document.getElementById("hud-main").classList.add("unlocked");
+        startWebSockets();
+      } else {
+        errEl.innerText = "⚠ CHIAVE API NON VALIDA";
+      }
+    }
+    document.getElementById("apikey-submit-btn").onclick = saveApiKey;
+    document.getElementById("apikey-input").addEventListener("keypress", e => e.key === "Enter" && saveApiKey());
+
+    // 5. WEBSOCKETS TELEMETRIA + RETE NEURALE + COMANDI
+    let cmdSocket;
+    function startWebSockets() {
+      const telSocket = new WebSocket(`ws://${location.host}/ws/telemetry`);
+      cmdSocket = new WebSocket(`ws://${location.host}/ws/commands`);
+
+      telSocket.onmessage = e => {
+        const d = JSON.parse(e.data);
+        document.getElementById("g-cpu-txt").innerText = `${d.cpu.overall}%`;
+        document.getElementById("g-cpu-ring").setAttribute("stroke-dasharray", `${d.cpu.overall}, 100`);
+        document.getElementById("g-ram-txt").innerText = `${d.ram.percent}%`;
+        document.getElementById("g-ram-ring").setAttribute("stroke-dasharray", `${d.ram.percent}, 100`);
+        document.getElementById("g-disk-txt").innerText = `${d.disk.percent}%`;
+        document.getElementById("g-disk-ring").setAttribute("stroke-dasharray", `${d.disk.percent}, 100`);
+        document.getElementById("os-procs").innerText = `${d.processes} Active`;
+
+        if (d.neural_net) {
+          document.getElementById("nn-epochs").innerText = d.neural_net.epoch;
+          document.getElementById("nn-loss").innerText = d.neural_net.loss;
+          document.getElementById("nn-pred").innerText = `${d.neural_net.predicted_load}%`;
+          document.getElementById("nn-anom").innerText = `RISK: ${d.neural_net.anomaly_score}%`;
+          window.drawNeuralNetworkHUD("neural-net-canvas", d.neural_net);
+        }
+      };
+
+      cmdSocket.onmessage = e => {
+        const d = JSON.parse(e.data);
+        if (d.type === "agent_activated" && d.intent) {
+          document.querySelectorAll(".agent-box").forEach(el => el.classList.remove("firing"));
+          const agEl = document.getElementById(`ag-${d.intent.agent}`);
+          if (agEl) agEl.classList.add("firing");
+        }
+        if (d.type === "final_response") {
+          document.getElementById("jarvis-sub").innerText = `JARVIS: ${d.response}`;
+          addIntelLog("JARVIS", d.response);
+          if (d.protocol && d.protocol !== "optimal") {
+            document.body.className = `mode-${d.protocol}`;
+            document.getElementById("protocol-label").innerText = d.protocol.toUpperCase();
+          }
+          if (d.has_audio) playJarvisSpeech();
+        }
+      };
+    }
+
+    function addIntelLog(tag, text) {
+      const feed = document.getElementById("intel-feed");
+      const item = document.createElement("div");
+      item.style.cssText = "border-left:2px solid var(--cyan); padding-left:6px;";
+      item.innerText = `[${tag}] ${text.slice(0, 90)}`;
+      feed.prepend(item);
+    }
+
+    window.sendCmd = function(text) {
+      const inp = document.getElementById("cmd-input");
+      const msg = text || inp.value.trim();
+      if (!msg || !cmdSocket) return;
+      addIntelLog("CMD", msg);
+      document.getElementById("jarvis-sub").innerText = "JARVIS: Elaborazione neurale in corso...";
+      cmdSocket.send(JSON.stringify({ prompt: msg }));
+      if (!text) inp.value = "";
+    };
+
+    document.getElementById("send-btn").onclick = () => sendCmd();
+    document.getElementById("cmd-input").addEventListener("keypress", e => e.key === "Enter" && sendCmd());
+
+    // Microfono Vocale
+    const micBtn = document.getElementById("mic-btn");
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SR();
+      rec.lang = "it-IT";
+      micBtn.onclick = () => {
+        rec.start();
+        document.getElementById("mic-status-lbl").innerText = "🔴 IN ASCOLTO...";
+      };
+      rec.onresult = e => {
+        sendCmd(e.results[0][0].transcript);
+        document.getElementById("mic-status-lbl").innerText = "Neural Voice: Giuseppe Adult";
+      };
+    }
+
+    // Orologio e Costellazione Memoria Animata
+    setInterval(() => {
+      document.getElementById("live-clock").innerText = new Date().toLocaleTimeString();
+    }, 1000);
+
+    (function animateConstellation() {
+      const c = document.getElementById("constellation-canvas");
+      const ctx = c.getContext("2d");
+      const pts = Array.from({ length: 24 }, () => ({
+        x: Math.random() * 300, y: Math.random() * 100,
+        vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6
+      }));
+      function draw() {
+        requestAnimationFrame(draw);
+        c.width = c.clientWidth; c.height = c.clientHeight;
+        ctx.clearRect(0, 0, c.width, c.height);
+        pts.forEach((p, i) => {
+          p.x = (p.x + p.vx + c.width) % c.width;
+          p.y = (p.y + p.vy + c.height) % c.height;
+          ctx.fillStyle = "#00e5ff";
+          ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); ctx.fill();
+          for (let j = i + 1; j < pts.length; j++) {
+            const dist = Math.hypot(p.x - pts[j].x, p.y - pts[j].y);
+            if (dist < 65) {
+              ctx.strokeStyle = `rgba(0, 229, 255, ${1 - dist / 65})`;
+              ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke();
+            }
+          }
+        });
+      }
+      draw();
+    })();
+  </script>
 </body>
 </html>
