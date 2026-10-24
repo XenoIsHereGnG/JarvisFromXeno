@@ -1,0 +1,1 @@
+"""Daemon di telemetria hardware"""
