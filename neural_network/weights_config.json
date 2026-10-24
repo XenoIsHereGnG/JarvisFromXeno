@@ -1,0 +1,6 @@
+{
+  "network_topology": [4, 8, 6, 2],
+  "activation": "sigmoid",
+  "optimizer": "online_sgd",
+  "hardware_target": "Intel Core i5-8350U CPU"
+}
